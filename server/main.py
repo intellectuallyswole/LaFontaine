@@ -2,15 +2,27 @@ from pathlib import Path
 import boto3
 
 from typing import BinaryIO
-import magic
 from openai import OpenAI
 import docx
 import logging
 from uuid  import uuid4
+# main.py
+from fastapi import FastAPI
+
+app = FastAPI()
+
 
 logger = logging.getLogger(__name__)
 
-client = OpenAI()
+try:
+    import magic
+except Exception as e:
+    logger.exception(f"Failed to initialize libmagic: {str(e)}")
+
+try:
+    client = OpenAI()
+except Exception as e:
+    logger.exception(f"Failed to initialize openai client: {str(e)}")
 
 
 def get_text_from_docx(file_path: str) -> str:
@@ -88,7 +100,7 @@ def get_audio_file_for_upload(upload_file: BinaryIO):
     if not (file_type == "docx" or file_type  == "pdf"):
         raise ValueError()
     input_text = None
-    if file_type == 'docx': 
+    if file_type == 'docx':
         input_text = get_text_from_docx(upload_file)
     elif file_type ==  'pdf':
         input_text = get_text_from_pdf(upload_file)
@@ -105,11 +117,12 @@ def get_audio_file_for_upload(upload_file: BinaryIO):
     logger.info(f"Signed URL of speech path: {signed_url}")
     return signed_url
 
-     
-
-
 def main():
     get_audio_file_for_upload(None)
+
+@app.get("/")
+def read_root():
+    return {"Hello": "World"}
 
 
 if __name__ == '__main__':

@@ -1,0 +1,15 @@
+# WORKLOG
+Running thoughts
+
+## 2023-12-27
+Need to figure out how to install poetry in the buildpack way of doing things.
+
+Useful commands (from server/):
+
+  docker build -t lafontaine-base:2023-12-27a -f builder.Dockerfile .
+	pack build lafontaine:2023-12-27a  --builder lafontaine-base:2023-12-27a
+	docker run -it -ePORT=8080 -p8080:8080 lafontaine:2023-12-27a
+
+Useful links
+
+  - Contains link to correct python builder (I hope) https://cloud.google.com/docs/buildpacks/builders
