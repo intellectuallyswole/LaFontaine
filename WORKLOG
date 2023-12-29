@@ -4,6 +4,10 @@ Running thoughts
 ## 2023-12-27
 Need to figure out how to install poetry in the buildpack way of doing things.
 
+Still can't get python in the custom build image even though google-22 is supposed to include python 3.10 and python 3.11.
+
+Do I  need to customize the build or run image? https://cloud.google.com/docs/buildpacks/build-run-image 
+
 Useful commands (from server/):
 
   docker build -t lafontaine-base:2023-12-27a -f builder.Dockerfile .
@@ -13,3 +17,4 @@ Useful commands (from server/):
 Useful links
 
   - Contains link to correct python builder (I hope) https://cloud.google.com/docs/buildpacks/builders
+  - https://github.com/GoogleCloudPlatform/buildpacks ?? 
