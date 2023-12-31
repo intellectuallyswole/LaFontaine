@@ -1,5 +1,11 @@
 # WORKLOG
 Running thoughts
+## 2023-12-30
+  File "/Users/madelaineboyd/src/lafontaine/server/main.py", line 109, in get_audio_file_for_upload
+    input_text = get_text_from_docx(upload_file.file)
+                                    ^^^^^^^^^^^^^^^^
+AttributeError: 'SpooledTemporaryFile' object has no attribute 'file'. Did you mean: '_file'?
+
 
 ## 2023-12-27
 Need to figure out how to install poetry in the buildpack way of doing things.
