@@ -16,6 +16,27 @@ uvicorn = "^0.25.0"
 [tool.poetry.dev-dependencies]
 pytest = "^7.4.3"
 
-[build-system]
-requires = ["poetry-core>=1.0.0"]
-build-backend = "poetry.core.masonry.api"
+
+[tool.pdm]
+package-type = "application"
+
+[project]
+name = "server"
+version = "0.1.0"
+description = "Default template for PDM package"
+authors = [
+    {name = "Madelaine Boyd", email = "madelaine.boyd+github@gmail.com"},
+]
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "openai",
+    "boto3",
+    "python-docx",
+    "python-magic",
+    "python-multipart",
+]
+requires-python = "==3.12.*"
+readme = "README.md"
+license = {text = "MIT"}
+

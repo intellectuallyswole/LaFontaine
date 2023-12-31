@@ -4,3 +4,4 @@ openai
 boto3
 python-docx
 python-magic
+python-multipart

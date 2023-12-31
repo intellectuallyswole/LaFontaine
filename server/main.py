@@ -7,7 +7,8 @@ import docx
 import logging
 from uuid  import uuid4
 # main.py
-from fastapi import FastAPI
+from fastapi import FastAPI, File, UploadFile
+from fastapi.responses import HTMLResponse, FileResponse
 
 app = FastAPI()
 
@@ -83,46 +84,85 @@ def upload_file_to_s3(file_name: str, bucket: str, object_name: str|None=None) -
     return True
 
 
-def get_audio_file_for_upload(upload_file: BinaryIO):
+def get_audio_file_for_upload(upload_file: UploadFile):
     """
     1. (optional)  Upload input file to storage bucket
     2. Infer file type (python magic)
     3. use correct library for file type to extract text  from  the file (PDF or doc)
     4. get audio from  text
     """
-    uploaded_path = upload_file_to_bucket(upload_file)
-    logger.info(f"Uploaded file to path {uploaded_path}.")
+    # TODO:
+    # uploaded_path = upload_file_to_bucket(upload_file)
+    # logger.info(f"Uploaded file to path {uploaded_path}.")
     # seek(0)
-    file_type = get_file_type_for_file(uploaded_file=upload_file)
+    try:
+        file_type = get_file_type_for_file(uploaded_file=upload_file.file)
+    except Exception:
+        logger.exception("Couldn't infer file type. Defaulting to docx.")
+        file_type = "docx"
     logger.info(f"Inferred file type:  {file_type}.")
-
 
     if not (file_type == "docx" or file_type  == "pdf"):
         raise ValueError()
     input_text = None
     if file_type == 'docx':
-        input_text = get_text_from_docx(upload_file)
+        input_text = get_text_from_docx(upload_file.file)
     elif file_type ==  'pdf':
-        input_text = get_text_from_pdf(upload_file)
+        input_text = get_text_from_pdf(upload_file.file)
     if not input_text:
         raise ValueError()
     logger.info("Dictating the following: "+input_text[:200]+"...")
     speech_path = get_audio_for_text(input_text)
     logger.info(f"Saved audio to {speech_path}")
-    uploaded_speech_path = None
-    with open(speech_path, 'rb') as speech_file:
-        uploaded_speech_path = upload_file_to_bucket(speech_file)
-    logger.info(f"Uploaded audio to {speech_path}")
-    signed_url = get_signed_url_for_file_path(uploaded_speech_path)
-    logger.info(f"Signed URL of speech path: {signed_url}")
-    return signed_url
+    # TODO
+    # uploaded_speech_path = None
+    # with open(speech_path, 'rb') as speech_file:
+    #     uploaded_speech_path = upload_file_to_bucket(speech_file)
+    # logger.info(f"Uploaded audio to {speech_path}")
+    # signed_url = get_signed_url_for_file_path(uploaded_speech_path)
+    # logger.info(f"Signed URL of speech path: {signed_url}")
+    # return signed_url
+    return FileResponse(path=speech_path, filename=upload_file.filename, media_type='audio/mpeg')
 
-def main():
-    get_audio_file_for_upload(None)
+
+@app.post("/uploadfile/")
+async def create_upload_file(file: UploadFile = File(...)):
+    logger.info("Uploaded file", extra={"filename": file.filename})
+    signed_url = get_audio_file_for_upload(file.file)
+    content = f'''
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Upload File</title>
+</head>
+<body>
+<form action="/uploadfile/" enctype="multipart/form-data" method="post">
+    <input type="file" name="file">
+    <input type="submit">
+</form>
+<a href="{signed_url}">Uploaded file: {signed_url}</a>
+</body>
+</html>
+    '''
+    return HTMLResponse(content=content)
 
 @app.get("/")
-def read_root():
-    return {"Hello": "World"}
+async def main():
+    content = '''
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Upload File</title>
+</head>
+<body>
+<form action="/uploadfile/" enctype="multipart/form-data" method="post">
+    <input type="file" name="file">
+    <input type="submit">
+</form>
+</body>
+</html>
+    '''
+    return HTMLResponse(content=content)
 
 
 if __name__ == '__main__':
