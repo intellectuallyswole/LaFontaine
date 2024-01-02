@@ -6,10 +6,11 @@ from openai import OpenAI
 import docx
 import logging
 from uuid  import uuid4
-# main.py
 from fastapi import FastAPI, File, UploadFile
 from fastapi.responses import HTMLResponse, FileResponse
+from dotenv import load_dotenv
 
+load_dotenv()
 app = FastAPI()
 
 
@@ -128,7 +129,7 @@ def get_audio_file_for_upload(upload_file: UploadFile):
 @app.post("/uploadfile/")
 async def create_upload_file(file: UploadFile = File(...)):
     logger.info("Uploaded file", extra={"filename": file.filename})
-    signed_url = get_audio_file_for_upload(file.file)
+    signed_url = get_audio_file_for_upload(file)
     content = f'''
 <!DOCTYPE html>
 <html>
