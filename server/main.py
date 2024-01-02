@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 import boto3
 
 from typing import BinaryIO
@@ -7,12 +8,15 @@ import docx
 import logging
 from uuid  import uuid4
 from fastapi import FastAPI, File, UploadFile
+from tempfile import SpooledTemporaryFile
 from fastapi.responses import HTMLResponse, FileResponse
 from dotenv import load_dotenv
+from pathlib import Path
 
 load_dotenv()
 app = FastAPI()
 
+logging.basicConfig(level=logging.INFO)
 
 logger = logging.getLogger(__name__)
 
@@ -27,17 +31,21 @@ except Exception as e:
     logger.exception(f"Failed to initialize openai client: {str(e)}")
 
 
-def get_text_from_docx(file_path: str) -> str:
-    doc = docx.Document(file_path)
-    full_text = []
-    for para in doc.paragraphs:
-        full_text.append(para.text)
-    return '\n'.join(full_text)
+def get_text_from_docx(file_obj: SpooledTemporaryFile) -> str:
+    with file_obj._file as docx_file:
+        # bytes_read = docx_file.read()
+        # Needs to be a file-like object
+        doc = docx.Document(docx_file)
+        full_text = []
+        for para in doc.paragraphs:
+            full_text.append(para.text)
+        docx_file.seek(0)
+        return '\n'.join(full_text)
 
 def get_text_from_pdf(file_path: str) -> str:
     raise NotImplementedError()
 
-def get_audio_for_text(input_text: str) -> str:
+def get_audio_for_text(input_text: str) -> Path:
     # TODO: Name based on first few words
     # file_name = input_text[:40]
     speech_file_path = Path(__file__).parent / str(uuid4()) / "speech.mp3"
@@ -46,6 +54,7 @@ def get_audio_for_text(input_text: str) -> str:
         voice="alloy",
         input=input_text
     )
+    os.makedirs(os.path.dirname(speech_file_path), exist_ok=True)
 
     response.stream_to_file(speech_file_path)
     return speech_file_path
@@ -54,9 +63,12 @@ def upload_file_to_bucket():
     raise NotImplementedError()
     ...
 
-def get_file_type_for_file(uploaded_file: BinaryIO) -> str:
+def get_file_type_for_file(uploaded_file: SpooledTemporaryFile) -> str:
     mime = magic.Magic(mime=True)
-    return mime.from_file(uploaded_file) # TODO: path?
+    # embedded null byte?
+    bytes_read = uploaded_file._file.read()
+    uploaded_file._file.seek(0)
+    return mime.from_file(bytes_read)
 
 def get_signed_url_for_file_path(file_path: str) -> str:
     raise NotImplementedError()
@@ -85,7 +97,7 @@ def upload_file_to_s3(file_name: str, bucket: str, object_name: str|None=None) -
     return True
 
 
-def get_audio_file_for_upload(upload_file: UploadFile):
+def get_audio_file_for_upload(upload_file: UploadFile) -> Path:
     """
     1. (optional)  Upload input file to storage bucket
     2. Infer file type (python magic)
@@ -98,23 +110,32 @@ def get_audio_file_for_upload(upload_file: UploadFile):
     # seek(0)
     try:
         file_type = get_file_type_for_file(uploaded_file=upload_file.file)
-    except Exception:
-        logger.exception("Couldn't infer file type. Defaulting to docx.")
+    except Exception as e:
+        logger.exception(f"Couldn't infer file type. Defaulting to docx. {str(e)}")
         file_type = "docx"
     logger.info(f"Inferred file type:  {file_type}.")
 
     if not (file_type == "docx" or file_type  == "pdf"):
         raise ValueError()
     input_text = None
-    if file_type == 'docx':
-        input_text = get_text_from_docx(upload_file.file)
-    elif file_type ==  'pdf':
-        input_text = get_text_from_pdf(upload_file.file)
+    try:
+        if file_type == 'docx':
+            input_text = get_text_from_docx(upload_file.file)
+        elif file_type ==  'pdf':
+            input_text = get_text_from_pdf(upload_file.file)
+    except Exception as e:
+        logger.exception(f"Couldn't extract text from file. {str(e)}")
+        raise
     if not input_text:
         raise ValueError()
     logger.info("Dictating the following: "+input_text[:200]+"...")
-    speech_path = get_audio_for_text(input_text)
+    try:
+        speech_path = get_audio_for_text(input_text)
+    except Exception:
+        logger.exception("Couldn't dictate input text.")
+        raise
     logger.info(f"Saved audio to {speech_path}")
+    return speech_path
     # TODO
     # uploaded_speech_path = None
     # with open(speech_path, 'rb') as speech_file:
@@ -123,13 +144,19 @@ def get_audio_file_for_upload(upload_file: UploadFile):
     # signed_url = get_signed_url_for_file_path(uploaded_speech_path)
     # logger.info(f"Signed URL of speech path: {signed_url}")
     # return signed_url
-    return FileResponse(path=speech_path, filename=upload_file.filename, media_type='audio/mpeg')
 
 
 @app.post("/uploadfile/")
 async def create_upload_file(file: UploadFile = File(...)):
-    logger.info("Uploaded file", extra={"filename": file.filename})
-    signed_url = get_audio_file_for_upload(file)
+    logger.info("Uploaded file", extra={"file__name": file.filename})
+    signed_url = None
+    error_msg = None
+    try:
+        speech_path = get_audio_file_for_upload(file)
+        return FileResponse(path=speech_path, filename=file.filename+".mp3", media_type='audio/mpeg')
+    except Exception as e:
+        error_msg = str(e)
+    body = f"""<a href="{signed_url}">Uploaded file: {signed_url}</a>""" if signed_url is not None else f"Error: {error_msg}"
     content = f'''
 <!DOCTYPE html>
 <html>
@@ -141,7 +168,7 @@ async def create_upload_file(file: UploadFile = File(...)):
     <input type="file" name="file">
     <input type="submit">
 </form>
-<a href="{signed_url}">Uploaded file: {signed_url}</a>
+{body}
 </body>
 </html>
     '''
